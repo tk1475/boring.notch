@@ -27,19 +27,26 @@ API rather than the public app API.
 > Some organizations disable app installs deliberately; session tokens bypass
 > that control.
 
-1. Open <https://app.slack.com> in a browser and sign in.
-2. Open DevTools (⌥⌘I on macOS).
-3. **Cookie (`xoxd-…`)**: **Application → Cookies → https://app.slack.com** →
+Use the **web client** at <https://app.slack.com> in a browser (not the desktop
+app — its storage layout differs), signed in. Open DevTools (⌥⌘I on macOS).
+
+1. **Cookie (`xoxd-…`)**: **Application → Cookies → https://app.slack.com** →
    the cookie named **`d`** → copy its value (starts with `xoxd-`).
-4. **Token (`xoxc-…`)**: in the **Console**, run:
+2. **Token (`xoxc-…`)** — via the **Network** tab (most reliable):
+   - Open the **Network** tab and filter for `api`.
+   - Click around Slack so requests appear, then select any request to
+     `…/api/…` (e.g. `client.counts`).
+   - In its **Payload** / Form Data, copy the `token` field (starts with `xoxc-`).
+
+   Console alternative (only if `localStorage.localConfig_v2` is present — run
+   that expression alone first; if it prints `undefined`, use the Network tab):
    ```js
    JSON.parse(localStorage.localConfig_v2).teams[
      document.location.pathname.match(/^\/client\/(T[A-Z0-9]+)/)?.[1]
        ?? Object.keys(JSON.parse(localStorage.localConfig_v2).teams)[0]
    ].token
    ```
-   Copy the `xoxc-…` string it prints.
-5. In Boring Notch: **Settings → Slack**, choose **Browser session**, paste both
+3. In Boring Notch: **Settings → Slack**, choose **Browser session**, paste both
    values, **Save session**.
 
 ## What each feature uses
