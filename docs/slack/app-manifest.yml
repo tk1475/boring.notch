@@ -1,0 +1,18 @@
+display_information:
+  name: Boring Notch (personal)
+  description: Personal token source for the Boring Notch Slack integration.
+  background_color: "#1d1c1d"
+oauth_config:
+  scopes:
+    user:
+      - im:read
+      - mpim:read
+      - users:read
+      - search:read
+      - users.profile:write
+      - dnd:write
+      - dnd:read
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

@@ -176,6 +176,14 @@ extension Defaults.Keys {
     static let hideAllDayEvents = Key<Bool>("hideAllDayEvents", default: false)
     static let showFullEventTitles = Key<Bool>("showFullEventTitles", default: false)
     static let autoScrollToNextEvent = Key<Bool>("autoScrollToNextEvent", default: true)
+
+    // MARK: Slack
+    static let enableSlackIntegration = Key<Bool>("enableSlackIntegration", default: false)
+    static let showSlackPanel = Key<Bool>("showSlackPanel", default: true)
+    static let slackShowBanners = Key<Bool>("slackShowBanners", default: true)
+    static let slackHuddleDetection = Key<Bool>("slackHuddleDetection", default: true)
+    static let slackPollIntervalSeconds = Key<Double>("slackPollIntervalSeconds", default: 30)
+    static let slackLastSeenMentionTs = Key<String>("slackLastSeenMentionTs", default: "")
     
     // MARK: Fullscreen Media Detection
     static let hideNotchOption = Key<HideNotchOption>("hideNotchOption", default: .nowPlayingOnly)

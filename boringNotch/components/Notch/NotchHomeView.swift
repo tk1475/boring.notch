@@ -453,6 +453,12 @@ struct NotchHomeView: View {
                     .transition(.opacity)
             }
 
+            if Defaults[.enableSlackIntegration], Defaults[.showSlackPanel] {
+                SlackView()
+                    .frame(width: shouldShowCamera ? 170 : 215)
+                    .transition(.opacity)
+            }
+
             if shouldShowCamera {
                 CameraPreviewView(webcamManager: webcamManager)
                     .scaledToFit()

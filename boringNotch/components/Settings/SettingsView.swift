@@ -39,6 +39,9 @@ struct SettingsView: View {
                 NavigationLink(value: "Calendar") {
                     Label("Calendar", systemImage: "calendar")
                 }
+                NavigationLink(value: "Slack") {
+                    Label("Slack", systemImage: "bubble.left.and.bubble.right.fill")
+                }
                 NavigationLink(value: "HUD") {
                     Label("HUDs", systemImage: "dial.medium.fill")
                 }
@@ -79,6 +82,8 @@ struct SettingsView: View {
                     Media()
                 case "Calendar":
                     CalendarSettings()
+                case "Slack":
+                    SlackSettings()
                 case "HUD":
                     HUD()
                 case "Battery":

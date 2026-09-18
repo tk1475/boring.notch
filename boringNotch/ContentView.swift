@@ -23,6 +23,7 @@ struct ContentView: View {
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var brightnessManager = BrightnessManager.shared
     @ObservedObject var volumeManager = VolumeManager.shared
+    @ObservedObject var slackManager = SlackManager.shared
     @State private var hoverTask: Task<Void, Never>?
     @State private var isHovering: Bool = false
     @State private var anyDropDebounceTask: Task<Void, Never>?
@@ -284,6 +285,28 @@ struct ContentView: View {
                             .frame(width: 76, alignment: .trailing)
                         }
                         .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
+                      } else if coordinator.expandingView.type == .slack && coordinator.expandingView.show
+                          && vm.notchState == .closed && Defaults[.enableSlackIntegration]
+                      {
+                          HStack(spacing: 0) {
+                              HStack {
+                                  Text(slackManager.bannerText)
+                                      .font(.subheadline)
+                                      .foregroundStyle(.white)
+                                      .lineLimit(1)
+                              }
+
+                              Rectangle()
+                                  .fill(.black)
+                                  .frame(width: vm.closedNotchSize.width + 10)
+
+                              HStack {
+                                  Image(systemName: "number.square.fill")
+                                      .foregroundStyle(.white, .purple)
+                              }
+                              .frame(width: 76, alignment: .trailing)
+                          }
+                          .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
                       } else if coordinator.sneakPeek.show && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && vm.notchState == .closed {
                           InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
                               .transition(.opacity)
