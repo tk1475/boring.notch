@@ -32,7 +32,7 @@ class SlackManager: ObservableObject {
     @Published var bannerText: String = ""
 
     var totalUnreadDMs: Int { dmSummaries.reduce(0) { $0 + $1.unreadCount } }
-    var hasToken: Bool { tokenStore.read() != nil }
+    var hasCredentials: Bool { currentAuth() != nil }
 
     private let service: SlackServiceProviding = SlackService()
     private let tokenStore = SlackKeychainTokenStore()
@@ -41,7 +41,52 @@ class SlackManager: ObservableObject {
     private var identity: SlackIdentity?
 
     private init() {
-        if Defaults[.enableSlackIntegration], hasToken {
+        if Defaults[.enableSlackIntegration], hasCredentials {
+            start()
+        }
+    }
+
+    // MARK: Credentials
+
+    /// Builds the auth for the currently selected mode, or nil if the required
+    /// secrets for that mode are missing.
+    private func currentAuth() -> SlackAuth? {
+        switch Defaults[.slackAuthMode] {
+        case .app:
+            guard let token = tokenStore.read(.appToken) else { return nil }
+            return .bearer(token)
+        case .session:
+            guard let token = tokenStore.read(.sessionToken),
+                  let cookie = tokenStore.read(.sessionCookie) else { return nil }
+            return .session(token: token, cookie: cookie)
+        }
+    }
+
+    func setAppToken(_ token: String) {
+        tokenStore.save(token.trimmingCharacters(in: .whitespacesAndNewlines), for: .appToken)
+        Defaults[.slackAuthMode] = .app
+        restartWithFreshIdentity()
+    }
+
+    func setSessionCredentials(token: String, cookie: String) {
+        tokenStore.save(token.trimmingCharacters(in: .whitespacesAndNewlines), for: .sessionToken)
+        tokenStore.save(cookie.trimmingCharacters(in: .whitespacesAndNewlines), for: .sessionCookie)
+        Defaults[.slackAuthMode] = .session
+        restartWithFreshIdentity()
+    }
+
+    func clearCredentials() {
+        tokenStore.deleteAll()
+        identity = nil
+        stop()
+        dmSummaries = []
+        mentions = []
+    }
+
+    private func restartWithFreshIdentity() {
+        identity = nil
+        stop()
+        if Defaults[.enableSlackIntegration] {
             start()
         }
     }
@@ -50,7 +95,7 @@ class SlackManager: ObservableObject {
 
     func start() {
         guard pollTask == nil else { return }
-        guard tokenStore.read() != nil else {
+        guard hasCredentials else {
             connectionState = .disconnected
             return
         }
@@ -74,30 +119,13 @@ class SlackManager: ObservableObject {
         stop()
     }
 
-    func setToken(_ token: String) {
-        tokenStore.save(token.trimmingCharacters(in: .whitespacesAndNewlines))
-        identity = nil
-        stop()
-        if Defaults[.enableSlackIntegration] {
-            start()
-        }
-    }
-
-    func clearToken() {
-        tokenStore.delete()
-        identity = nil
-        stop()
-        dmSummaries = []
-        mentions = []
-    }
-
     // MARK: Quick actions
 
     func setStatus(text: String, emoji: String, expiresIn minutes: Int?) async {
-        guard let token = tokenStore.read() else { return }
+        guard let auth = currentAuth() else { return }
         let expiry = minutes.map { Date().addingTimeInterval(TimeInterval($0 * 60)) }
         do {
-            try await service.setStatus(token: token, text: text, emoji: emoji, expiresAt: expiry)
+            try await service.setStatus(auth: auth, text: text, emoji: emoji, expiresAt: expiry)
         } catch {
             NSLog("SlackManager: setStatus failed: \(error.localizedDescription)")
         }
@@ -108,18 +136,18 @@ class SlackManager: ObservableObject {
     }
 
     func snooze(minutes: Int) async {
-        guard let token = tokenStore.read() else { return }
+        guard let auth = currentAuth() else { return }
         do {
-            dndState = try await service.setSnooze(token: token, minutes: minutes)
+            dndState = try await service.setSnooze(auth: auth, minutes: minutes)
         } catch {
             NSLog("SlackManager: snooze failed: \(error.localizedDescription)")
         }
     }
 
     func endSnooze() async {
-        guard let token = tokenStore.read() else { return }
+        guard let auth = currentAuth() else { return }
         do {
-            dndState = try await service.endSnooze(token: token)
+            dndState = try await service.endSnooze(auth: auth)
         } catch {
             NSLog("SlackManager: endSnooze failed: \(error.localizedDescription)")
         }
@@ -130,25 +158,25 @@ class SlackManager: ObservableObject {
     /// Runs one poll cycle; returns the delay in seconds before the next one.
     private func pollOnce() async -> TimeInterval {
         let interval = max(15, Defaults[.slackPollIntervalSeconds])
-        guard let token = tokenStore.read() else {
+        guard let auth = currentAuth() else {
             connectionState = .disconnected
             return interval
         }
 
         do {
             if identity == nil {
-                identity = try await service.testAuth(token: token)
+                identity = try await service.testAuth(auth: auth)
             }
             guard let identity else { return interval }
             connectionState = .connected(identity)
 
-            let dms = try await service.fetchDMSummaries(token: token)
+            let dms = try await service.fetchDMSummaries(auth: auth)
             let newMentions = try await service.fetchMentions(
-                token: token,
+                auth: auth,
                 userID: identity.userID,
                 newerThan: Defaults[.slackLastSeenMentionTs].isEmpty ? nil : Defaults[.slackLastSeenMentionTs]
             )
-            let dnd = try await service.fetchDND(token: token)
+            let dnd = try await service.fetchDND(auth: auth)
 
             let previousUnread = totalUnreadDMs
             dmSummaries = dms

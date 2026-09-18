@@ -179,6 +179,7 @@ extension Defaults.Keys {
 
     // MARK: Slack
     static let enableSlackIntegration = Key<Bool>("enableSlackIntegration", default: false)
+    static let slackAuthMode = Key<SlackAuthMode>("slackAuthMode", default: .app)
     static let showSlackPanel = Key<Bool>("showSlackPanel", default: true)
     static let slackShowBanners = Key<Bool>("slackShowBanners", default: true)
     static let slackHuddleDetection = Key<Bool>("slackHuddleDetection", default: true)

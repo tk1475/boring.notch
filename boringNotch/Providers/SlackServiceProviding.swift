@@ -2,12 +2,27 @@
 //  SlackServiceProviding.swift
 //  boringNotch
 //
-//  Slack Web API client. Token is a user OAuth token (xoxp-…) from a
-//  personal Slack app; see docs/slack/README.md for the app manifest.
+//  Slack Web API client. Supports two auth modes:
+//   - .app     an OAuth user token (xoxp-…) from a personal Slack app
+//   - .session a browser session token (xoxc-…) + `d` cookie (xoxd-…)
+//  See docs/slack/README.md for how to obtain each.
 //
 
 import Foundation
+import Defaults
 import Security
+
+// MARK: - Auth
+
+enum SlackAuthMode: String, Defaults.Serializable {
+    case app
+    case session
+}
+
+enum SlackAuth: Sendable {
+    case bearer(String)                       // xoxp / xoxb
+    case session(token: String, cookie: String)  // xoxc + xoxd
+}
 
 // MARK: - Models
 
@@ -48,8 +63,8 @@ enum SlackServiceError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notAuthenticated: return "No Slack token configured"
-        case .invalidToken: return "Slack rejected the token"
+        case .notAuthenticated: return "No Slack credentials configured"
+        case .invalidToken: return "Slack rejected the credentials"
         case .rateLimited(let s): return "Rate limited by Slack (retry in \(Int(s))s)"
         case .httpError(let code): return "Slack HTTP error \(code)"
         case .apiError(let e): return "Slack API error: \(e)"
@@ -61,13 +76,13 @@ enum SlackServiceError: LocalizedError {
 // MARK: - Protocol
 
 protocol SlackServiceProviding: Sendable {
-    func testAuth(token: String) async throws -> SlackIdentity
-    func fetchDMSummaries(token: String) async throws -> [SlackDMSummary]
-    func fetchMentions(token: String, userID: String, newerThan ts: String?) async throws -> [SlackMention]
-    func setStatus(token: String, text: String, emoji: String, expiresAt: Date?) async throws
-    func setSnooze(token: String, minutes: Int) async throws -> SlackDNDState
-    func endSnooze(token: String) async throws -> SlackDNDState
-    func fetchDND(token: String) async throws -> SlackDNDState
+    func testAuth(auth: SlackAuth) async throws -> SlackIdentity
+    func fetchDMSummaries(auth: SlackAuth) async throws -> [SlackDMSummary]
+    func fetchMentions(auth: SlackAuth, userID: String, newerThan ts: String?) async throws -> [SlackMention]
+    func setStatus(auth: SlackAuth, text: String, emoji: String, expiresAt: Date?) async throws
+    func setSnooze(auth: SlackAuth, minutes: Int) async throws -> SlackDNDState
+    func endSnooze(auth: SlackAuth) async throws -> SlackDNDState
+    func fetchDND(auth: SlackAuth) async throws -> SlackDNDState
 }
 
 // MARK: - Service
@@ -83,9 +98,11 @@ final class SlackService: SlackServiceProviding {
     private let nameCache = SlackNameCache()
 
     init() {
-        let configuration = URLSessionConfiguration.default
+        let configuration = URLSessionConfiguration.ephemeral
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.urlCache = nil
+        configuration.httpCookieStorage = nil   // we set the `d` cookie manually
+        configuration.httpShouldSetCookies = false
         configuration.timeoutIntervalForRequest = 15
         configuration.timeoutIntervalForResource = 30
         self.session = URLSession(configuration: configuration)
@@ -93,8 +110,8 @@ final class SlackService: SlackServiceProviding {
 
     // MARK: Endpoints
 
-    func testAuth(token: String) async throws -> SlackIdentity {
-        let response: AuthTestResponse = try await call("auth.test", token: token)
+    func testAuth(auth: SlackAuth) async throws -> SlackIdentity {
+        let response: AuthTestResponse = try await call("auth.test", auth: auth)
         return SlackIdentity(
             userID: response.user_id ?? "",
             userName: response.user ?? "",
@@ -102,11 +119,11 @@ final class SlackService: SlackServiceProviding {
         )
     }
 
-    func fetchDMSummaries(token: String) async throws -> [SlackDMSummary] {
+    func fetchDMSummaries(auth: SlackAuth) async throws -> [SlackDMSummary] {
         let list: ConversationsListResponse = try await call(
             "conversations.list",
-            query: ["types": "im,mpim", "exclude_archived": "true", "limit": "200"],
-            token: token
+            params: ["types": "im,mpim", "exclude_archived": "true", "limit": "200"],
+            auth: auth
         )
         let conversations = (list.channels ?? []).prefix(Self.maxTrackedDMs)
 
@@ -114,8 +131,8 @@ final class SlackService: SlackServiceProviding {
         for conversation in conversations {
             let info: ConversationsInfoResponse = try await call(
                 "conversations.info",
-                query: ["channel": conversation.id],
-                token: token
+                params: ["channel": conversation.id],
+                auth: auth
             )
             let unread = info.channel?.unread_count_display ?? 0
             guard unread > 0 else { continue }
@@ -126,7 +143,7 @@ final class SlackService: SlackServiceProviding {
             } else if let counterpart = conversation.user {
                 name = try await nameCache.displayName(for: counterpart) {
                     let userInfo: UsersInfoResponse = try await self.call(
-                        "users.info", query: ["user": counterpart], token: token
+                        "users.info", params: ["user": counterpart], auth: auth
                     )
                     return userInfo.user?.profile?.display_name.flatMap { $0.isEmpty ? nil : $0 }
                         ?? userInfo.user?.real_name
@@ -146,16 +163,16 @@ final class SlackService: SlackServiceProviding {
         return summaries.sorted { $0.unreadCount > $1.unreadCount }
     }
 
-    func fetchMentions(token: String, userID: String, newerThan ts: String?) async throws -> [SlackMention] {
+    func fetchMentions(auth: SlackAuth, userID: String, newerThan ts: String?) async throws -> [SlackMention] {
         let response: SearchMessagesResponse = try await call(
             "search.messages",
-            query: [
+            params: [
                 "query": "<@\(userID)>",
                 "count": "20",
                 "sort": "timestamp",
                 "sort_dir": "desc",
             ],
-            token: token
+            auth: auth
         )
         let matches = response.messages?.matches ?? []
         return matches.compactMap { match -> SlackMention? in
@@ -172,66 +189,72 @@ final class SlackService: SlackServiceProviding {
         }
     }
 
-    func setStatus(token: String, text: String, emoji: String, expiresAt: Date?) async throws {
+    func setStatus(auth: SlackAuth, text: String, emoji: String, expiresAt: Date?) async throws {
         let expiration = expiresAt.map { Int($0.timeIntervalSince1970) } ?? 0
-        let body: [String: Any] = [
-            "profile": [
-                "status_text": text,
-                "status_emoji": emoji,
-                "status_expiration": expiration,
-            ]
+        let profile: [String: Any] = [
+            "status_text": text,
+            "status_emoji": emoji,
+            "status_expiration": expiration,
         ]
-        let _: BareOKResponse = try await call("users.profile.set", jsonBody: body, token: token)
+        let profileJSON = String(
+            data: try JSONSerialization.data(withJSONObject: profile), encoding: .utf8
+        ) ?? "{}"
+        let _: BareOKResponse = try await call(
+            "users.profile.set", params: ["profile": profileJSON], auth: auth
+        )
     }
 
-    func setSnooze(token: String, minutes: Int) async throws -> SlackDNDState {
+    func setSnooze(auth: SlackAuth, minutes: Int) async throws -> SlackDNDState {
         let response: DNDResponse = try await call(
-            "dnd.setSnooze", query: ["num_minutes": String(minutes)], token: token
+            "dnd.setSnooze", params: ["num_minutes": String(minutes)], auth: auth
         )
         return response.dndState
     }
 
-    func endSnooze(token: String) async throws -> SlackDNDState {
+    func endSnooze(auth: SlackAuth) async throws -> SlackDNDState {
         // dnd.endSnooze errors with "snooze_not_active" if none is active; treat as success.
         do {
-            let response: DNDResponse = try await call("dnd.endSnooze", method: "POST", token: token)
+            let response: DNDResponse = try await call("dnd.endSnooze", auth: auth)
             return response.dndState
         } catch SlackServiceError.apiError(let message) where message == "snooze_not_active" {
             return SlackDNDState(snoozeEnabled: false, snoozeEndsAt: nil)
         }
     }
 
-    func fetchDND(token: String) async throws -> SlackDNDState {
-        let response: DNDResponse = try await call("dnd.info", token: token)
+    func fetchDND(auth: SlackAuth) async throws -> SlackDNDState {
+        let response: DNDResponse = try await call("dnd.info", auth: auth)
         return response.dndState
     }
 
     // MARK: Transport
 
+    /// All calls are POST application/x-www-form-urlencoded, which every Slack
+    /// Web API method accepts and which session (xoxc) tokens require.
     private func call<Response: SlackAPIResponse>(
         _ method: String,
-        query: [String: String] = [:],
-        jsonBody: [String: Any]? = nil,
-        method httpMethod: String? = nil,
-        token: String
+        params: [String: String] = [:],
+        auth: SlackAuth
     ) async throws -> Response {
-        guard var components = URLComponents(string: Self.baseURL + method) else {
+        guard let url = URL(string: Self.baseURL + method) else {
             throw SlackServiceError.invalidResponse
         }
-        if !query.isEmpty {
-            components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
-        }
-        guard let url = components.url else { throw SlackServiceError.invalidResponse }
 
         var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        if let jsonBody {
-            request.httpMethod = "POST"
-            request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONSerialization.data(withJSONObject: jsonBody)
-        } else {
-            request.httpMethod = httpMethod ?? "GET"
+        request.httpMethod = "POST"
+        request.setValue(
+            "application/x-www-form-urlencoded; charset=utf-8",
+            forHTTPHeaderField: "Content-Type"
+        )
+
+        var body = params
+        switch auth {
+        case .bearer(let token):
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        case .session(let token, let cookie):
+            body["token"] = token
+            request.setValue("d=\(cookie)", forHTTPHeaderField: "Cookie")
         }
+        request.httpBody = Self.formEncode(body)
 
         let (data, urlResponse) = try await session.data(for: request)
         guard let http = urlResponse as? HTTPURLResponse else {
@@ -252,12 +275,24 @@ final class SlackService: SlackServiceProviding {
         let decoded = try Self.decoder.decode(Response.self, from: data)
         if decoded.ok != true {
             let error = decoded.error ?? "unknown_error"
-            if error == "invalid_auth" || error == "token_revoked" || error == "account_inactive" {
+            if error == "invalid_auth" || error == "token_revoked"
+                || error == "account_inactive" || error == "not_authed" {
                 throw SlackServiceError.invalidToken
             }
             throw SlackServiceError.apiError(error)
         }
         return decoded
+    }
+
+    private static func formEncode(_ params: [String: String]) -> Data {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        let pairs = params.map { key, value -> String in
+            let k = key.addingPercentEncoding(withAllowedCharacters: allowed) ?? key
+            let v = value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
+            return "\(k)=\(v)"
+        }
+        return Data(pairs.joined(separator: "&").utf8)
     }
 }
 
@@ -365,48 +400,60 @@ private struct DNDResponse: SlackAPIResponse {
     }
 }
 
-// MARK: - Keychain token storage
+// MARK: - Keychain credential storage
 
-/// Stores the Slack user token as a generic password in the app's sandboxed keychain.
-/// First Keychain use in this codebase — tokens must not live in Defaults/UserDefaults.
+/// Stores Slack secrets as generic passwords in the app's sandboxed keychain.
+/// Secrets must not live in Defaults/UserDefaults; only the non-secret
+/// `slackAuthMode` selector does.
 struct SlackKeychainTokenStore {
     private static let service = "theboringteam.boringnotch.slack"
-    private static let account = "user-oauth-token"
 
-    func read() -> String? {
+    enum Item: String {
+        case appToken = "user-oauth-token"    // xoxp
+        case sessionToken = "session-token"   // xoxc
+        case sessionCookie = "session-cookie" // xoxd (the `d` cookie value)
+    }
+
+    func read(_ item: Item) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.service,
-            kSecAttrAccount as String: Self.account,
+            kSecAttrAccount as String: item.rawValue,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data,
-              let token = String(data: data, encoding: .utf8),
-              !token.isEmpty
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data,
+              let value = String(data: data, encoding: .utf8),
+              !value.isEmpty
         else { return nil }
-        return token
+        return value
     }
 
-    func save(_ token: String) {
-        delete()
+    func save(_ value: String, for item: Item) {
+        delete(item)
         let attributes: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.service,
-            kSecAttrAccount as String: Self.account,
-            kSecValueData as String: Data(token.utf8),
+            kSecAttrAccount as String: item.rawValue,
+            kSecValueData as String: Data(value.utf8),
         ]
         SecItemAdd(attributes as CFDictionary, nil)
     }
 
-    func delete() {
+    func delete(_ item: Item) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.service,
-            kSecAttrAccount as String: Self.account,
+            kSecAttrAccount as String: item.rawValue,
         ]
         SecItemDelete(query as CFDictionary)
+    }
+
+    func deleteAll() {
+        delete(.appToken)
+        delete(.sessionToken)
+        delete(.sessionCookie)
     }
 }

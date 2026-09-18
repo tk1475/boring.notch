@@ -2,8 +2,9 @@
 //  SlackSettings.swift
 //  boringNotch
 //
-//  Settings pane for the Slack integration. Token setup instructions and
-//  the Slack app manifest live in docs/slack/README.md.
+//  Settings pane for the Slack integration. Supports two auth modes:
+//  a personal Slack app token (xoxp) or a browser session token (xoxc + xoxd).
+//  Setup for both lives in docs/slack/README.md.
 //
 
 import Defaults
@@ -12,12 +13,15 @@ import SwiftUI
 struct SlackSettings: View {
     @ObservedObject private var slackManager = SlackManager.shared
     @Default(.enableSlackIntegration) var enableSlackIntegration
+    @Default(.slackAuthMode) var slackAuthMode
     @Default(.showSlackPanel) var showSlackPanel
     @Default(.slackShowBanners) var slackShowBanners
     @Default(.slackHuddleDetection) var slackHuddleDetection
     @Default(.slackPollIntervalSeconds) var slackPollIntervalSeconds
 
-    @State private var tokenInput: String = ""
+    @State private var appTokenInput: String = ""
+    @State private var sessionTokenInput: String = ""
+    @State private var sessionCookieInput: String = ""
 
     var body: some View {
         Form {
@@ -31,30 +35,25 @@ struct SlackSettings: View {
             } header: {
                 Text("Slack")
             } footer: {
-                Text("Create a personal Slack app from the manifest in docs/slack/README.md, install it to your workspace, and paste its user OAuth token (xoxp-…) below. The token is stored in the macOS Keychain.")
+                Text("See docs/slack/README.md for full setup. Secrets are stored in the macOS Keychain.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Section(header: Text("Account")) {
                 connectionRow
-
-                SecureField("User OAuth token (xoxp-…)", text: $tokenInput)
-                    .textFieldStyle(.roundedBorder)
-
-                HStack {
-                    Button("Save token") {
-                        slackManager.setToken(tokenInput)
-                        tokenInput = ""
-                    }
-                    .disabled(tokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                    if slackManager.hasToken {
-                        Button("Remove token", role: .destructive) {
-                            slackManager.clearToken()
-                        }
-                    }
+                Picker("Sign in with", selection: $slackAuthMode) {
+                    Text("Slack app token").tag(SlackAuthMode.app)
+                    Text("Browser session (advanced)").tag(SlackAuthMode.session)
                 }
+                .pickerStyle(.segmented)
+            }
+
+            switch slackAuthMode {
+            case .app:
+                appTokenSection
+            case .session:
+                sessionSection
             }
 
             Section(header: Text("Appearance")) {
@@ -77,6 +76,62 @@ struct SlackSettings: View {
                     Text("2 minutes").tag(120.0)
                 }
             }
+
+            if slackManager.hasCredentials {
+                Section {
+                    Button("Remove Slack credentials", role: .destructive) {
+                        slackManager.clearCredentials()
+                        appTokenInput = ""
+                        sessionTokenInput = ""
+                        sessionCookieInput = ""
+                    }
+                }
+            }
+        }
+    }
+
+    private var appTokenSection: some View {
+        Section {
+            SecureField("User OAuth token (xoxp-…)", text: $appTokenInput)
+                .textFieldStyle(.roundedBorder)
+            Button("Save token") {
+                slackManager.setAppToken(appTokenInput)
+                appTokenInput = ""
+            }
+            .disabled(appTokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        } header: {
+            Text("Slack app token")
+        } footer: {
+            Text("Create a personal Slack app from docs/slack/app-manifest.yml, install it to a workspace you can install apps in, and paste its User OAuth Token.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var sessionSection: some View {
+        Section {
+            SecureField("Workspace token (xoxc-…)", text: $sessionTokenInput)
+                .textFieldStyle(.roundedBorder)
+            SecureField("Cookie value (xoxd-…)", text: $sessionCookieInput)
+                .textFieldStyle(.roundedBorder)
+            Button("Save session") {
+                slackManager.setSessionCredentials(
+                    token: sessionTokenInput,
+                    cookie: sessionCookieInput
+                )
+                sessionTokenInput = ""
+                sessionCookieInput = ""
+            }
+            .disabled(
+                sessionTokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || sessionCookieInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            )
+        } header: {
+            Text("Browser session")
+        } footer: {
+            Text("No app install required. In a browser signed in to Slack, open DevTools: copy the `d` cookie value (xoxd-…) and the workspace token (xoxc-…) from Local Storage. Session tokens rotate, so you may need to re-paste them occasionally. See docs/slack/README.md.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
