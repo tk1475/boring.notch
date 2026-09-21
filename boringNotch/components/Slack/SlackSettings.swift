@@ -63,6 +63,10 @@ struct SlackSettings: View {
                 Defaults.Toggle(key: .slackShowBanners) {
                     Text("Show a banner for new mentions and DMs")
                 }
+                Defaults.Toggle(key: .slackNotifyDMs) {
+                    Text("Notify in the notch for new direct messages")
+                }
+                .disabled(!slackShowBanners)
                 Defaults.Toggle(key: .slackHuddleDetection) {
                     Text("Detect huddles (via Slack's microphone use)")
                 }

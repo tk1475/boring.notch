@@ -42,6 +42,8 @@ class SlackManager: ObservableObject {
     /// Set true after the first successful poll; gates banners so pre-existing
     /// unreads at launch don't all fire notifications.
     private var establishedBaseline = false
+    /// Last seen unread count per DM conversation, to detect newly arrived DMs.
+    private var previousDMUnread: [String: Int] = [:]
 
     private init() {
         if Defaults[.enableSlackIntegration], hasCredentials {
@@ -104,6 +106,7 @@ class SlackManager: ObservableObject {
         }
         connectionState = .connecting
         establishedBaseline = false
+        previousDMUnread = [:]
         pollTask = Task { [weak self] in
             while let self, !Task.isCancelled {
                 let delay = await self.pollOnce()
@@ -185,7 +188,11 @@ class SlackManager: ObservableObject {
             )
             let dnd = try await service.fetchDND(auth: auth)
 
-            let previousUnread = totalUnreadDMs
+            // Detect DMs whose unread count grew since the last poll, so we can
+            // name the sender rather than just show a total.
+            let newDMs = dms.filter { $0.unreadCount > (previousDMUnread[$0.id] ?? 0) }
+            previousDMUnread = Dictionary(uniqueKeysWithValues: dms.map { ($0.id, $0.unreadCount) })
+
             dmSummaries = dms
             dndState = dnd
 
@@ -195,9 +202,8 @@ class SlackManager: ObservableObject {
                     Defaults[.slackLastSeenMentionTs] = newest
                 }
                 if !isBaselinePoll { announceMentions(newMentions) }
-            } else if !isBaselinePoll, Defaults[.slackShowBanners], totalUnreadDMs > previousUnread {
-                bannerText = "\(totalUnreadDMs) unread DM\(totalUnreadDMs == 1 ? "" : "s")"
-                BoringViewCoordinator.shared.toggleExpandingView(status: true, type: .slack)
+            } else if !isBaselinePoll, Defaults[.slackShowBanners], Defaults[.slackNotifyDMs], !newDMs.isEmpty {
+                announceDMs(newDMs)
             }
             establishedBaseline = true
         } catch SlackServiceError.rateLimited(let retryAfter) {
@@ -222,6 +228,15 @@ class SlackManager: ObservableObject {
             bannerText = "@\(latest.userName) in #\(latest.channelName)"
         } else {
             bannerText = "\(newMentions.count) new mentions"
+        }
+        BoringViewCoordinator.shared.toggleExpandingView(status: true, type: .slack)
+    }
+
+    private func announceDMs(_ newDMs: [SlackDMSummary]) {
+        if newDMs.count == 1, let dm = newDMs.first {
+            bannerText = dm.isGroup ? "\(dm.name) (group)" : "DM from \(dm.name)"
+        } else {
+            bannerText = "\(newDMs.count) new DMs"
         }
         BoringViewCoordinator.shared.toggleExpandingView(status: true, type: .slack)
     }
