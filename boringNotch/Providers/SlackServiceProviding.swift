@@ -37,6 +37,7 @@ struct SlackDMSummary: Identifiable, Sendable, Equatable {
     let name: String        // counterpart display name or group name
     let unreadCount: Int
     let isGroup: Bool
+    let avatarURL: URL?
 }
 
 struct SlackMention: Identifiable, Sendable, Equatable {
@@ -46,6 +47,13 @@ struct SlackMention: Identifiable, Sendable, Equatable {
     let text: String
     let timestamp: String   // Slack ts, e.g. "1726650000.000100" (sortable)
     let permalink: URL?
+    let avatarURL: URL?
+}
+
+/// Cached per-user profile bits (display name + avatar).
+struct SlackUserInfo: Sendable, Equatable {
+    let name: String
+    let avatarURL: URL?
 }
 
 struct SlackDNDState: Sendable, Equatable {
@@ -95,7 +103,7 @@ final class SlackService: SlackServiceProviding {
     private static let decoder = JSONDecoder()
 
     // Cache of userID -> display name to avoid repeated users.info calls.
-    private let nameCache = SlackNameCache()
+    private let userCache = SlackUserCache()
 
     init() {
         let configuration = URLSessionConfiguration.ephemeral
@@ -120,44 +128,52 @@ final class SlackService: SlackServiceProviding {
     }
 
     func fetchDMSummaries(auth: SlackAuth) async throws -> [SlackDMSummary] {
-        let list: ConversationsListResponse = try await call(
-            "conversations.list",
-            params: ["types": "im,mpim", "exclude_archived": "true", "limit": "200"],
-            auth: auth
-        )
-        let conversations = (list.channels ?? []).prefix(Self.maxTrackedDMs)
+        // Discover which DMs/group-DMs have unread messages. `client.counts` is
+        // the endpoint Slack's own client uses; it reports per-conversation
+        // unread flags in one call and works with session tokens (unlike
+        // conversations.list, which ignores the im/mpim type filter for them).
+        // Falls back to conversations.list for app (xoxp) tokens.
+        var unread: [(id: String, isGroup: Bool)] = []
+        do {
+            let counts: ClientCountsResponse = try await call("client.counts", auth: auth)
+            for im in counts.ims ?? [] where im.isUnread { unread.append((im.id, false)) }
+            for mpim in counts.mpims ?? [] where mpim.isUnread { unread.append((mpim.id, true)) }
+        } catch {
+            let list: ConversationsListResponse = try await call(
+                "conversations.list",
+                params: ["types": "im,mpim", "exclude_archived": "true", "limit": "200"],
+                auth: auth
+            )
+            unread = (list.channels ?? []).map { ($0.id, $0.is_mpim == true) }
+        }
 
         var summaries: [SlackDMSummary] = []
-        for conversation in conversations {
+        for conversation in unread.prefix(Self.maxTrackedDMs) {
             let info: ConversationsInfoResponse = try await call(
                 "conversations.info",
                 params: ["channel": conversation.id],
                 auth: auth
             )
-            let unread = info.channel?.unread_count_display ?? 0
-            guard unread > 0 else { continue }
+            let count = info.channel?.unread_count_display ?? 0
+            guard count > 0 else { continue }
 
             let name: String
-            if conversation.is_mpim == true {
-                name = conversation.name ?? "Group DM"
-            } else if let counterpart = conversation.user {
-                name = try await nameCache.displayName(for: counterpart) {
-                    let userInfo: UsersInfoResponse = try await self.call(
-                        "users.info", params: ["user": counterpart], auth: auth
-                    )
-                    return userInfo.user?.profile?.display_name.flatMap { $0.isEmpty ? nil : $0 }
-                        ?? userInfo.user?.real_name
-                        ?? userInfo.user?.name
-                        ?? counterpart
-                }
+            var avatarURL: URL?
+            if conversation.isGroup {
+                name = info.channel?.name ?? "Group DM"
+            } else if let counterpart = info.channel?.user {
+                let user = try await resolveUser(counterpart, auth: auth)
+                name = user.name
+                avatarURL = user.avatarURL
             } else {
                 name = "DM"
             }
             summaries.append(SlackDMSummary(
                 id: conversation.id,
                 name: name,
-                unreadCount: unread,
-                isGroup: conversation.is_mpim == true
+                unreadCount: count,
+                isGroup: conversation.isGroup,
+                avatarURL: avatarURL
             ))
         }
         return summaries.sorted { $0.unreadCount > $1.unreadCount }
@@ -174,18 +190,42 @@ final class SlackService: SlackServiceProviding {
             ],
             auth: auth
         )
-        let matches = response.messages?.matches ?? []
-        return matches.compactMap { match -> SlackMention? in
-            guard let messageTs = match.ts else { return nil }
-            if let newerThan = ts, messageTs <= newerThan { return nil }
-            return SlackMention(
+        var mentions: [SlackMention] = []
+        for match in response.messages?.matches ?? [] {
+            guard let messageTs = match.ts else { continue }
+            if let newerThan = ts, messageTs <= newerThan { continue }
+            var name = match.username ?? "someone"
+            var avatarURL: URL?
+            if let author = match.user {
+                let user = try await resolveUser(author, auth: auth)
+                avatarURL = user.avatarURL
+                if name == "someone" { name = user.name }
+            }
+            mentions.append(SlackMention(
                 id: "\(match.channel?.id ?? "")-\(messageTs)",
                 channelName: match.channel?.name ?? "unknown",
-                userName: match.username ?? "someone",
+                userName: name,
                 text: match.text ?? "",
                 timestamp: messageTs,
-                permalink: match.permalink.flatMap(URL.init(string:))
+                permalink: match.permalink.flatMap(URL.init(string:)),
+                avatarURL: avatarURL
+            ))
+        }
+        return mentions
+    }
+
+    /// Resolves a user's display name + avatar, cached across polls.
+    private func resolveUser(_ userID: String, auth: SlackAuth) async throws -> SlackUserInfo {
+        try await userCache.info(for: userID) {
+            let userInfo: UsersInfoResponse = try await self.call(
+                "users.info", params: ["user": userID], auth: auth
             )
+            let name = userInfo.user?.profile?.display_name.flatMap { $0.isEmpty ? nil : $0 }
+                ?? userInfo.user?.real_name
+                ?? userInfo.user?.name
+                ?? userID
+            let image = userInfo.user?.profile?.image_72 ?? userInfo.user?.profile?.image_48
+            return SlackUserInfo(name: name, avatarURL: image.flatMap(URL.init(string:)))
         }
     }
 
@@ -298,13 +338,13 @@ final class SlackService: SlackServiceProviding {
 
 // MARK: - Name cache
 
-private actor SlackNameCache {
-    private var names: [String: String] = [:]
+private actor SlackUserCache {
+    private var users: [String: SlackUserInfo] = [:]
 
-    func displayName(for userID: String, resolve: () async throws -> String) async rethrows -> String {
-        if let cached = names[userID] { return cached }
+    func info(for userID: String, resolve: () async throws -> SlackUserInfo) async rethrows -> SlackUserInfo {
+        if let cached = users[userID] { return cached }
         let resolved = try await resolve()
-        names[userID] = resolved
+        users[userID] = resolved
         return resolved
     }
 }
@@ -345,6 +385,8 @@ private struct ConversationsListResponse: SlackAPIResponse {
 private struct ConversationsInfoResponse: SlackAPIResponse {
     struct Channel: Decodable {
         let id: String
+        let name: String?
+        let user: String?
         let unread_count_display: Int?
     }
     let ok: Bool?
@@ -352,9 +394,24 @@ private struct ConversationsInfoResponse: SlackAPIResponse {
     let channel: Channel?
 }
 
+private struct ClientCountsResponse: SlackAPIResponse {
+    struct Entry: Decodable {
+        let id: String
+        let has_unreads: Bool?
+        let mention_count: Int?
+        var isUnread: Bool { (has_unreads ?? false) || (mention_count ?? 0) > 0 }
+    }
+    let ok: Bool?
+    let error: String?
+    let ims: [Entry]?
+    let mpims: [Entry]?
+}
+
 private struct UsersInfoResponse: SlackAPIResponse {
     struct Profile: Decodable {
         let display_name: String?
+        let image_72: String?
+        let image_48: String?
     }
     struct User: Decodable {
         let name: String?
@@ -375,6 +432,7 @@ private struct SearchMessagesResponse: SlackAPIResponse {
         let ts: String?
         let text: String?
         let username: String?
+        let user: String?
         let permalink: String?
         let channel: ChannelRef?
     }

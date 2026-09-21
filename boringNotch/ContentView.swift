@@ -301,8 +301,7 @@ struct ContentView: View {
                                   .frame(width: vm.closedNotchSize.width + 10)
 
                               HStack {
-                                  Image(systemName: "number.square.fill")
-                                      .foregroundStyle(.white, .purple)
+                                  SlackMark(size: 18)
                               }
                               .frame(width: 76, alignment: .trailing)
                           }

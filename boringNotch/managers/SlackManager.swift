@@ -39,6 +39,9 @@ class SlackManager: ObservableObject {
     private let huddleDetector = SlackHuddleDetector()
     private var pollTask: Task<Void, Never>?
     private var identity: SlackIdentity?
+    /// Set true after the first successful poll; gates banners so pre-existing
+    /// unreads at launch don't all fire notifications.
+    private var establishedBaseline = false
 
     private init() {
         if Defaults[.enableSlackIntegration], hasCredentials {
@@ -100,6 +103,7 @@ class SlackManager: ObservableObject {
             return
         }
         connectionState = .connecting
+        establishedBaseline = false
         pollTask = Task { [weak self] in
             while let self, !Task.isCancelled {
                 let delay = await self.pollOnce()
@@ -170,6 +174,9 @@ class SlackManager: ObservableObject {
             guard let identity else { return interval }
             connectionState = .connected(identity)
 
+            // First poll after launch/auth establishes a baseline: populate the
+            // panel but don't fire banners for pre-existing mentions/DMs.
+            let isBaselinePoll = !establishedBaseline
             let dms = try await service.fetchDMSummaries(auth: auth)
             let newMentions = try await service.fetchMentions(
                 auth: auth,
@@ -187,11 +194,12 @@ class SlackManager: ObservableObject {
                 if let newest = newMentions.map(\.timestamp).max() {
                     Defaults[.slackLastSeenMentionTs] = newest
                 }
-                announceMentions(newMentions)
-            } else if Defaults[.slackShowBanners], totalUnreadDMs > previousUnread {
+                if !isBaselinePoll { announceMentions(newMentions) }
+            } else if !isBaselinePoll, Defaults[.slackShowBanners], totalUnreadDMs > previousUnread {
                 bannerText = "\(totalUnreadDMs) unread DM\(totalUnreadDMs == 1 ? "" : "s")"
                 BoringViewCoordinator.shared.toggleExpandingView(status: true, type: .slack)
             }
+            establishedBaseline = true
         } catch SlackServiceError.rateLimited(let retryAfter) {
             return max(retryAfter, interval)
         } catch SlackServiceError.invalidToken {

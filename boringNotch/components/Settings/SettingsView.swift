@@ -40,7 +40,15 @@ struct SettingsView: View {
                     Label("Calendar", systemImage: "calendar")
                 }
                 NavigationLink(value: "Slack") {
-                    Label("Slack", systemImage: "bubble.left.and.bubble.right.fill")
+                    Label {
+                        Text("Slack")
+                    } icon: {
+                        Image("SlackLogoMono")
+                            .renderingMode(.template)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 15, height: 15)
+                    }
                 }
                 NavigationLink(value: "HUD") {
                     Label("HUDs", systemImage: "dial.medium.fill")

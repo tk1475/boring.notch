@@ -439,13 +439,22 @@ struct NotchHomeView: View {
         Defaults[.showMirror] && webcamManager.cameraAvailable && vm.isCameraExpanded
     }
 
+    /// Width for each side panel, narrowed when several coexist so the open
+    /// notch doesn't grow too wide (e.g. calendar + Slack + music together).
+    private var sidePanelWidth: CGFloat {
+        let slackShown = Defaults[.enableSlackIntegration] && Defaults[.showSlackPanel]
+        let bothPanels = Defaults[.showCalendar] && slackShown
+        if shouldShowCamera { return bothPanels ? 140 : 170 }
+        return bothPanels ? 190 : 215
+    }
+
     private var mainContent: some View {
         HStack(alignment: .top, spacing: (shouldShowCamera && Defaults[.showCalendar]) ? 10 : 15) {
             MusicPlayerView(albumArtNamespace: albumArtNamespace)
 
             if Defaults[.showCalendar] {
                 CalendarView()
-                    .frame(width: shouldShowCamera ? 170 : 215)
+                    .frame(width: sidePanelWidth)
                     .onHover { isHovering in
                         vm.isHoveringCalendar = isHovering
                     }
@@ -455,7 +464,7 @@ struct NotchHomeView: View {
 
             if Defaults[.enableSlackIntegration], Defaults[.showSlackPanel] {
                 SlackView()
-                    .frame(width: shouldShowCamera ? 170 : 215)
+                    .frame(width: sidePanelWidth)
                     .transition(.opacity)
             }
 
