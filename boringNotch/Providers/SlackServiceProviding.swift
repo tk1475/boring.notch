@@ -201,11 +201,14 @@ final class SlackService: SlackServiceProviding {
                 avatarURL = user.avatarURL
                 if name == "someone" { name = user.name }
             }
+            let text = await SlackMessageFormatter.format(match.text ?? "") { userID in
+                (try? await self.resolveUser(userID, auth: auth))?.name
+            }
             mentions.append(SlackMention(
                 id: "\(match.channel?.id ?? "")-\(messageTs)",
                 channelName: match.channel?.name ?? "unknown",
                 userName: name,
-                text: match.text ?? "",
+                text: text,
                 timestamp: messageTs,
                 permalink: match.permalink.flatMap(URL.init(string:)),
                 avatarURL: avatarURL

@@ -45,6 +45,7 @@
 		1163988F2DF5CC870052E6AF /* CalendarModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1163988E2DF5CC870052E6AF /* CalendarModel.swift */; };
 		116398962DF5D6C00052E6AF /* CalendarServiceProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 116398952DF5D6C00052E6AF /* CalendarServiceProviding.swift */; };
 		5A1ACC012026091800000002 /* SlackServiceProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1ACC012026091800000001 /* SlackServiceProviding.swift */; };
+		5A1ACC012026091800000012 /* SlackMessageFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1ACC012026091800000011 /* SlackMessageFormatter.swift */; };
 		5A1ACC012026091800000004 /* SlackManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1ACC012026091800000003 /* SlackManager.swift */; };
 		5A1ACC012026091800000006 /* SlackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1ACC012026091800000005 /* SlackView.swift */; };
 		5A1ACC012026091800000008 /* SlackSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1ACC012026091800000007 /* SlackSettings.swift */; };
@@ -219,6 +220,7 @@
 		1163988E2DF5CC870052E6AF /* CalendarModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarModel.swift; sourceTree = "<group>"; };
 		116398952DF5D6C00052E6AF /* CalendarServiceProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarServiceProviding.swift; sourceTree = "<group>"; };
 		5A1ACC012026091800000001 /* SlackServiceProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlackServiceProviding.swift; sourceTree = "<group>"; };
+		5A1ACC012026091800000011 /* SlackMessageFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlackMessageFormatter.swift; sourceTree = "<group>"; };
 		5A1ACC012026091800000003 /* SlackManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlackManager.swift; sourceTree = "<group>"; };
 		5A1ACC012026091800000005 /* SlackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlackView.swift; sourceTree = "<group>"; };
 		5A1ACC012026091800000007 /* SlackSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlackSettings.swift; sourceTree = "<group>"; };
@@ -448,6 +450,7 @@
 			children = (
 				116398952DF5D6C00052E6AF /* CalendarServiceProviding.swift */,
 				5A1ACC012026091800000001 /* SlackServiceProviding.swift */,
+				5A1ACC012026091800000011 /* SlackMessageFormatter.swift */,
 			);
 			path = Providers;
 			sourceTree = "<group>";
@@ -949,6 +952,7 @@
 				B141C2412CA5F53F00AC8CC8 /* SparkleView.swift in Sources */,
 				116398962DF5D6C00052E6AF /* CalendarServiceProviding.swift in Sources */,
 				5A1ACC012026091800000002 /* SlackServiceProviding.swift in Sources */,
+				5A1ACC012026091800000012 /* SlackMessageFormatter.swift in Sources */,
 				5A1ACC012026091800000004 /* SlackManager.swift in Sources */,
 				5A1ACC012026091800000006 /* SlackView.swift in Sources */,
 				5A1ACC012026091800000008 /* SlackSettings.swift in Sources */,
