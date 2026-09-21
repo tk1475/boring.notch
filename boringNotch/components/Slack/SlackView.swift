@@ -119,11 +119,12 @@ struct SlackView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 6) {
-            SlackMark(size: 15)
+        HStack(spacing: 5) {
+            SlackMark(size: 14)
             Text("Slack")
-                .font(.headline)
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white)
+                .lineLimit(1)
             if slackManager.totalUnreadDMs > 0 {
                 Text("\(slackManager.totalUnreadDMs)")
                     .font(.caption2.bold())
@@ -199,44 +200,50 @@ struct SlackView: View {
                 if !slackManager.dmSummaries.isEmpty {
                     sectionHeader("Direct messages")
                     ForEach(slackManager.dmSummaries) { dm in
-                        HStack(spacing: 8) {
-                            SlackAvatar(name: dm.name, isGroup: dm.isGroup, avatarURL: dm.avatarURL)
+                        HStack(spacing: 6) {
+                            SlackAvatar(name: dm.name, isGroup: dm.isGroup, avatarURL: dm.avatarURL, size: 18)
                             Text(dm.name)
-                                .font(.caption)
+                                .font(.caption2)
                                 .foregroundStyle(.white)
                                 .lineLimit(1)
-                            Spacer()
+                                .truncationMode(.tail)
+                            Spacer(minLength: 4)
                             Text("\(dm.unreadCount)")
-                                .font(.caption2.bold())
-                                .padding(.horizontal, 5)
+                                .font(.system(size: 9, weight: .bold))
+                                .padding(.horizontal, 4)
                                 .padding(.vertical, 1)
                                 .background(Capsule().fill(SlackBrand.red))
                                 .foregroundStyle(.white)
+                                .layoutPriority(1)
                         }
                     }
                 }
 
                 if !slackManager.mentions.isEmpty {
                     sectionHeader("Mentions")
-                    ForEach(slackManager.mentions.prefix(5)) { mention in
+                    ForEach(slackManager.mentions.prefix(4)) { mention in
                         Button {
                             if let permalink = mention.permalink {
                                 NSWorkspace.shared.open(permalink)
                             }
                         } label: {
-                            HStack(alignment: .top, spacing: 8) {
-                                SlackAvatar(name: mention.userName, avatarURL: mention.avatarURL)
+                            HStack(alignment: .top, spacing: 6) {
+                                SlackAvatar(name: mention.userName, avatarURL: mention.avatarURL, size: 18)
                                 VStack(alignment: .leading, spacing: 1) {
-                                    HStack(spacing: 4) {
+                                    HStack(spacing: 3) {
                                         Text(mention.userName)
-                                            .font(.caption2.bold())
+                                            .font(.system(size: 10, weight: .bold))
                                             .foregroundStyle(.white)
+                                            .lineLimit(1)
+                                            .truncationMode(.tail)
                                         Text("#\(mention.channelName)")
-                                            .font(.caption2)
+                                            .font(.system(size: 10))
                                             .foregroundStyle(SlackBrand.blue)
+                                            .lineLimit(1)
+                                            .truncationMode(.tail)
                                     }
                                     Text(mention.text)
-                                        .font(.caption2)
+                                        .font(.system(size: 10))
                                         .foregroundStyle(.secondary)
                                         .lineLimit(2)
                                         .multilineTextAlignment(.leading)

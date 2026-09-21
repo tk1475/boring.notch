@@ -444,8 +444,8 @@ struct NotchHomeView: View {
     private var sidePanelWidth: CGFloat {
         let slackShown = Defaults[.enableSlackIntegration] && Defaults[.showSlackPanel]
         let bothPanels = Defaults[.showCalendar] && slackShown
-        if shouldShowCamera { return bothPanels ? 140 : 170 }
-        return bothPanels ? 190 : 215
+        if shouldShowCamera { return bothPanels ? 125 : 165 }
+        return bothPanels ? 165 : 205
     }
 
     private var mainContent: some View {
