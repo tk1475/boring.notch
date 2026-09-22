@@ -73,6 +73,10 @@ struct SlackSettings: View {
                 Defaults.Toggle(key: .slackHuddleDetection) {
                     Text("Detect huddles (via Slack's microphone use)")
                 }
+                Button("Preview notification") {
+                    slackManager.previewBanner()
+                }
+                .disabled(!slackShowBanners)
             }
 
             Section {

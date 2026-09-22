@@ -328,6 +328,19 @@ class SlackManager: ObservableObject {
         BoringViewCoordinator.shared.toggleExpandingView(status: true, type: .slack)
     }
 
+    /// Fires a sample banner so the notch notification can be previewed on
+    /// demand. Uses a real DM (real avatar + name) when one is available.
+    func previewBanner() {
+        if let dm = dmSummaries.first {
+            bannerText = dm.isGroup ? dm.name : conciseName(dm.name)
+            setBannerSender(name: dm.name, avatarURL: dm.avatarURL, isGroup: dm.isGroup)
+        } else {
+            bannerText = "Preview notification"
+            setBannerSender(name: "Preview", avatarURL: nil, isGroup: false)
+        }
+        BoringViewCoordinator.shared.toggleExpandingView(status: true, type: .slack)
+    }
+
     private func setBannerSender(name: String, avatarURL: URL?, isGroup: Bool) {
         bannerAvatarName = name
         bannerAvatarURL = avatarURL
