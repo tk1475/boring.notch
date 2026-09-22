@@ -280,7 +280,7 @@ struct SlackView: View {
                     sectionHeader("Direct messages")
                     ForEach(slackManager.dmSummaries) { dm in
                         Button {
-                            slackManager.openConversation(id: dm.id)
+                            slackManager.openDM(dm)
                         } label: {
                             HStack(spacing: 6) {
                                 SlackAvatar(name: dm.name, isGroup: dm.isGroup, avatarURL: dm.avatarURL, size: 18)
@@ -308,11 +308,7 @@ struct SlackView: View {
                     sectionHeader("Mentions")
                     ForEach(slackManager.mentions.prefix(4)) { mention in
                         Button {
-                            if !mention.channelID.isEmpty {
-                                slackManager.openConversation(id: mention.channelID, messageTs: mention.timestamp)
-                            } else if let permalink = mention.permalink {
-                                NSWorkspace.shared.open(permalink)
-                            }
+                            slackManager.openMention(mention)
                         } label: {
                             HStack(alignment: .top, spacing: 6) {
                                 SlackAvatar(name: mention.userName, avatarURL: mention.avatarURL, size: 18)

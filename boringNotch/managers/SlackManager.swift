@@ -65,6 +65,9 @@ class SlackManager: ObservableObject {
     private var establishedBaseline = false
     /// Last seen unread count per DM conversation, to detect newly arrived DMs.
     private var previousDMUnread: [String: Int] = [:]
+    /// DMs the user has opened from the panel; hidden until the server marks
+    /// them read (they drop off) or a new message arrives (they return).
+    private var dismissedDMs: Set<String> = []
 
     private init() {
         if Defaults[.enableSlackIntegration], hasCredentials {
@@ -107,6 +110,7 @@ class SlackManager: ObservableObject {
         stop()
         dmSummaries = []
         mentions = []
+        dismissedDMs = []
     }
 
     private func restartWithFreshIdentity() {
@@ -128,6 +132,7 @@ class SlackManager: ObservableObject {
         connectionState = .connecting
         establishedBaseline = false
         previousDMUnread = [:]
+        dismissedDMs = []
         pollTask = Task { [weak self] in
             while let self, !Task.isCancelled {
                 let delay = await self.pollOnce()
@@ -148,6 +153,25 @@ class SlackManager: ObservableObject {
     }
 
     // MARK: Opening in Slack
+
+    /// Opens a DM in Slack and removes it from the panel right away. The next
+    /// poll keeps it hidden until Slack marks it read (then it's forgotten) or a
+    /// new message arrives (then it returns).
+    func openDM(_ dm: SlackDMSummary) {
+        openConversation(id: dm.id)
+        dismissedDMs.insert(dm.id)
+        dmSummaries.removeAll { $0.id == dm.id }
+    }
+
+    /// Opens a mention in Slack and removes it from the panel.
+    func openMention(_ mention: SlackMention) {
+        if !mention.channelID.isEmpty {
+            openConversation(id: mention.channelID, messageTs: mention.timestamp)
+        } else if let permalink = mention.permalink {
+            NSWorkspace.shared.open(permalink)
+        }
+        mentions.removeAll { $0.id == mention.id }
+    }
 
     /// Opens a conversation in the Slack desktop app via a `slack://` deep link,
     /// falling back to the web client when the app isn't installed. `messageTs`
@@ -239,7 +263,12 @@ class SlackManager: ObservableObject {
             let newDMs = dms.filter { $0.unreadCount > (previousDMUnread[$0.id] ?? 0) }
             previousDMUnread = Dictionary(uniqueKeysWithValues: dms.map { ($0.id, $0.unreadCount) })
 
-            dmSummaries = dms
+            // A new message in a dismissed DM brings it back; once the server no
+            // longer reports a DM unread, stop tracking its dismissal.
+            for dm in newDMs { dismissedDMs.remove(dm.id) }
+            dismissedDMs.formIntersection(Set(dms.map(\.id)))
+
+            dmSummaries = dms.filter { !dismissedDMs.contains($0.id) }
             dndState = dnd
 
             if !newMentions.isEmpty {
