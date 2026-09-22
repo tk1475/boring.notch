@@ -308,7 +308,7 @@ class SlackManager: ObservableObject {
     private func announceMentions(_ newMentions: [SlackMention]) {
         guard Defaults[.slackShowBanners] else { return }
         if let latest = newMentions.first {
-            bannerText = "\(latest.userName) in #\(latest.channelName)"
+            bannerText = "\(conciseName(latest.userName)) in #\(latest.channelName)"
             setBannerSender(name: latest.userName, avatarURL: latest.avatarURL, isGroup: false)
         } else {
             bannerText = "\(newMentions.count) new mentions"
@@ -319,10 +319,10 @@ class SlackManager: ObservableObject {
 
     private func announceDMs(_ newDMs: [SlackDMSummary]) {
         if newDMs.count == 1, let dm = newDMs.first {
-            bannerText = dm.name
+            bannerText = dm.isGroup ? dm.name : conciseName(dm.name)
             setBannerSender(name: dm.name, avatarURL: dm.avatarURL, isGroup: dm.isGroup)
         } else {
-            bannerText = "\(newDMs.count) new direct messages"
+            bannerText = "\(newDMs.count) new DMs"
             setBannerSender(name: "Slack", avatarURL: nil, isGroup: newDMs.count > 1)
         }
         BoringViewCoordinator.shared.toggleExpandingView(status: true, type: .slack)
@@ -332,6 +332,14 @@ class SlackManager: ObservableObject {
         bannerAvatarName = name
         bannerAvatarURL = avatarURL
         bannerIsGroup = isGroup
+    }
+
+    /// A compact name for the closed-notch banner: the full name when it's
+    /// short, otherwise just the first name so it fits without a mid-word cut.
+    private func conciseName(_ name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count > 16 else { return trimmed }
+        return trimmed.split(separator: " ").first.map(String.init) ?? trimmed
     }
 }
 

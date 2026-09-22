@@ -302,7 +302,7 @@ struct ContentView: View {
                                       .lineLimit(1)
                                       .truncationMode(.tail)
                               }
-                              .frame(width: 120, alignment: .trailing)
+                              .frame(maxWidth: 170, alignment: .trailing)
                               .padding(.trailing, 8)
 
                               Rectangle()
