@@ -302,7 +302,7 @@ struct ContentView: View {
                                       .lineLimit(1)
                                       .truncationMode(.tail)
                               }
-                              .frame(maxWidth: .infinity, alignment: .trailing)
+                              .frame(width: 120, alignment: .trailing)
                               .padding(.trailing, 8)
 
                               Rectangle()
@@ -312,7 +312,7 @@ struct ContentView: View {
                               HStack {
                                   SlackMark(size: 18)
                               }
-                              .frame(width: 76, alignment: .trailing)
+                              .frame(width: 76, alignment: .leading)
                           }
                           .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
                       } else if Defaults[.enableSlackIntegration] && Defaults[.slackShowStatusOnNotch]
@@ -336,7 +336,7 @@ struct ContentView: View {
                                       SlackMark(size: 14)
                                   }
                               }
-                              .frame(maxWidth: .infinity, alignment: .trailing)
+                              .frame(width: 76, alignment: .trailing)
                               .padding(.trailing, 8)
 
                               Rectangle()
