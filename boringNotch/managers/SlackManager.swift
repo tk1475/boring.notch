@@ -280,6 +280,14 @@ class SlackManager: ObservableObject {
             } else if !isBaselinePoll, Defaults[.slackShowBanners], Defaults[.slackNotifyDMs], !newDMs.isEmpty {
                 announceDMs(newDMs)
             }
+
+            // Drop mentions that Slack no longer flags as unread (i.e. read in
+            // the Slack app), so the feed clears itself the same way DMs do.
+            // Best-effort: client.counts isn't available for every token type.
+            if !mentions.isEmpty,
+               let unreadMentionChannels = try? await service.fetchUnreadMentionChannelIDs(auth: auth) {
+                mentions = mentions.filter { unreadMentionChannels.contains($0.channelID) }
+            }
             establishedBaseline = true
         } catch SlackServiceError.rateLimited(let retryAfter) {
             return max(retryAfter, interval)

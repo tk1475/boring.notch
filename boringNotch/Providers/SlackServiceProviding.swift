@@ -97,6 +97,9 @@ protocol SlackServiceProviding: Sendable {
     func testAuth(auth: SlackAuth) async throws -> SlackIdentity
     func fetchDMSummaries(auth: SlackAuth) async throws -> [SlackDMSummary]
     func fetchMentions(auth: SlackAuth, userID: String, newerThan ts: String?) async throws -> [SlackMention]
+    /// Channel/DM ids that currently have unread @mentions, per client.counts.
+    /// Used to drop mentions from the feed once they've been read in Slack.
+    func fetchUnreadMentionChannelIDs(auth: SlackAuth) async throws -> Set<String>
     func setStatus(auth: SlackAuth, text: String, emoji: String, expiresAt: Date?) async throws
     func fetchStatus(auth: SlackAuth) async throws -> SlackStatus
     func setSnooze(auth: SlackAuth, minutes: Int) async throws -> SlackDNDState
@@ -228,6 +231,16 @@ final class SlackService: SlackServiceProviding {
             ))
         }
         return mentions
+    }
+
+    func fetchUnreadMentionChannelIDs(auth: SlackAuth) async throws -> Set<String> {
+        let counts: ClientCountsResponse = try await call("client.counts", auth: auth)
+        var ids = Set<String>()
+        for entry in (counts.channels ?? []) + (counts.mpims ?? []) + (counts.ims ?? [])
+        where (entry.mention_count ?? 0) > 0 {
+            ids.insert(entry.id)
+        }
+        return ids
     }
 
     /// Resolves a user's display name + avatar, cached across polls.
@@ -432,6 +445,7 @@ private struct ClientCountsResponse: SlackAPIResponse {
     let error: String?
     let ims: [Entry]?
     let mpims: [Entry]?
+    let channels: [Entry]?
 }
 
 private struct UsersInfoResponse: SlackAPIResponse {
