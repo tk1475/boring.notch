@@ -61,6 +61,14 @@ struct SlackDNDState: Sendable, Equatable {
     var snoozeEndsAt: Date?
 }
 
+/// The signed-in user's own Slack status (custom status text + emoji).
+struct SlackStatus: Sendable, Equatable {
+    var text: String
+    var emoji: String        // Slack shortcode, e.g. ":coffee:"
+    var expiresAt: Date?
+    var isSet: Bool { !text.isEmpty || !emoji.isEmpty }
+}
+
 enum SlackServiceError: LocalizedError {
     case notAuthenticated
     case invalidToken
@@ -88,6 +96,7 @@ protocol SlackServiceProviding: Sendable {
     func fetchDMSummaries(auth: SlackAuth) async throws -> [SlackDMSummary]
     func fetchMentions(auth: SlackAuth, userID: String, newerThan ts: String?) async throws -> [SlackMention]
     func setStatus(auth: SlackAuth, text: String, emoji: String, expiresAt: Date?) async throws
+    func fetchStatus(auth: SlackAuth) async throws -> SlackStatus
     func setSnooze(auth: SlackAuth, minutes: Int) async throws -> SlackDNDState
     func endSnooze(auth: SlackAuth) async throws -> SlackDNDState
     func fetchDND(auth: SlackAuth) async throws -> SlackDNDState
@@ -244,6 +253,16 @@ final class SlackService: SlackServiceProviding {
         ) ?? "{}"
         let _: BareOKResponse = try await call(
             "users.profile.set", params: ["profile": profileJSON], auth: auth
+        )
+    }
+
+    func fetchStatus(auth: SlackAuth) async throws -> SlackStatus {
+        let response: ProfileGetResponse = try await call("users.profile.get", auth: auth)
+        let expiration = response.profile?.status_expiration ?? 0
+        return SlackStatus(
+            text: response.profile?.status_text ?? "",
+            emoji: response.profile?.status_emoji ?? "",
+            expiresAt: expiration > 0 ? Date(timeIntervalSince1970: TimeInterval(expiration)) : nil
         )
     }
 
@@ -445,6 +464,17 @@ private struct SearchMessagesResponse: SlackAPIResponse {
     let ok: Bool?
     let error: String?
     let messages: Messages?
+}
+
+private struct ProfileGetResponse: SlackAPIResponse {
+    struct Profile: Decodable {
+        let status_text: String?
+        let status_emoji: String?
+        let status_expiration: Int?
+    }
+    let ok: Bool?
+    let error: String?
+    let profile: Profile?
 }
 
 private struct DNDResponse: SlackAPIResponse {

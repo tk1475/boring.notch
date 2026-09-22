@@ -67,18 +67,28 @@ struct SlackSettings: View {
                     Text("Notify in the notch for new direct messages")
                 }
                 .disabled(!slackShowBanners)
+                Defaults.Toggle(key: .slackShowStatusOnNotch) {
+                    Text("Keep my status showing on the notch")
+                }
                 Defaults.Toggle(key: .slackHuddleDetection) {
                     Text("Detect huddles (via Slack's microphone use)")
                 }
             }
 
-            Section(header: Text("Polling")) {
+            Section {
                 Picker("Refresh every", selection: $slackPollIntervalSeconds) {
+                    Text("5 seconds").tag(5.0)
                     Text("15 seconds").tag(15.0)
                     Text("30 seconds").tag(30.0)
                     Text("1 minute").tag(60.0)
                     Text("2 minutes").tag(120.0)
                 }
+            } header: {
+                Text("Polling")
+            } footer: {
+                Text("Faster refresh means quicker notifications but more requests. 5 seconds is fine for a single workspace; back off if Slack rate-limits you.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             if slackManager.hasCredentials {

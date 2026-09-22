@@ -27,12 +27,33 @@ class SlackManager: ObservableObject {
     @Published var dmSummaries: [SlackDMSummary] = []
     @Published var mentions: [SlackMention] = []
     @Published var dndState = SlackDNDState(snoozeEnabled: false, snoozeEndsAt: nil)
+    @Published var status = SlackStatus(text: "", emoji: "", expiresAt: nil)
     @Published var isInHuddle: Bool = false
-    /// Text shown in the closed-notch banner when a new mention arrives.
+    /// Text shown in the closed-notch banner when a new mention/DM arrives.
     @Published var bannerText: String = ""
+    /// Sender identity for the banner avatar (falls back to the Slack mark).
+    @Published var bannerAvatarURL: URL?
+    @Published var bannerAvatarName: String = ""
+    @Published var bannerIsGroup: Bool = false
 
     var totalUnreadDMs: Int { dmSummaries.reduce(0) { $0 + $1.unreadCount } }
     var hasCredentials: Bool { currentAuth() != nil }
+
+    /// The status emoji rendered as a unicode glyph, when known.
+    var statusGlyph: String? { SlackMessageFormatter.emojiGlyph(for: status.emoji) }
+
+    /// Whether there's any Slack presence worth showing persistently on the notch.
+    var hasSlackPresence: Bool {
+        status.isSet || dndState.snoozeEnabled || isInHuddle
+    }
+
+    /// Short label for the persistent notch presence indicator.
+    var notchPresenceText: String {
+        if status.isSet { return status.text.isEmpty ? "Status set" : status.text }
+        if isInHuddle { return "In a huddle" }
+        if dndState.snoozeEnabled { return "Do not disturb" }
+        return ""
+    }
 
     private let service: SlackServiceProviding = SlackService()
     private let tokenStore = SlackKeychainTokenStore()
@@ -164,7 +185,7 @@ class SlackManager: ObservableObject {
 
     /// Runs one poll cycle; returns the delay in seconds before the next one.
     private func pollOnce() async -> TimeInterval {
-        let interval = max(15, Defaults[.slackPollIntervalSeconds])
+        let interval = max(5, Defaults[.slackPollIntervalSeconds])
         guard let auth = currentAuth() else {
             connectionState = .disconnected
             return interval
@@ -187,6 +208,10 @@ class SlackManager: ObservableObject {
                 newerThan: Defaults[.slackLastSeenMentionTs].isEmpty ? nil : Defaults[.slackLastSeenMentionTs]
             )
             let dnd = try await service.fetchDND(auth: auth)
+            // Status is non-critical; a failure here shouldn't break the poll.
+            if let fetchedStatus = try? await service.fetchStatus(auth: auth) {
+                status = fetchedStatus
+            }
 
             // Detect DMs whose unread count grew since the last poll, so we can
             // name the sender rather than just show a total.
@@ -225,20 +250,30 @@ class SlackManager: ObservableObject {
     private func announceMentions(_ newMentions: [SlackMention]) {
         guard Defaults[.slackShowBanners] else { return }
         if let latest = newMentions.first {
-            bannerText = "@\(latest.userName) in #\(latest.channelName)"
+            bannerText = "\(latest.userName) in #\(latest.channelName)"
+            setBannerSender(name: latest.userName, avatarURL: latest.avatarURL, isGroup: false)
         } else {
             bannerText = "\(newMentions.count) new mentions"
+            setBannerSender(name: "Slack", avatarURL: nil, isGroup: false)
         }
         BoringViewCoordinator.shared.toggleExpandingView(status: true, type: .slack)
     }
 
     private func announceDMs(_ newDMs: [SlackDMSummary]) {
         if newDMs.count == 1, let dm = newDMs.first {
-            bannerText = dm.isGroup ? "\(dm.name) (group)" : "DM from \(dm.name)"
+            bannerText = dm.name
+            setBannerSender(name: dm.name, avatarURL: dm.avatarURL, isGroup: dm.isGroup)
         } else {
-            bannerText = "\(newDMs.count) new DMs"
+            bannerText = "\(newDMs.count) new direct messages"
+            setBannerSender(name: "Slack", avatarURL: nil, isGroup: newDMs.count > 1)
         }
         BoringViewCoordinator.shared.toggleExpandingView(status: true, type: .slack)
+    }
+
+    private func setBannerSender(name: String, avatarURL: URL?, isGroup: Bool) {
+        bannerAvatarName = name
+        bannerAvatarURL = avatarURL
+        bannerIsGroup = isGroup
     }
 }
 

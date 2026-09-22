@@ -289,12 +289,21 @@ struct ContentView: View {
                           && vm.notchState == .closed && Defaults[.enableSlackIntegration]
                       {
                           HStack(spacing: 0) {
-                              HStack {
+                              HStack(spacing: 6) {
+                                  SlackAvatar(
+                                      name: slackManager.bannerAvatarName,
+                                      isGroup: slackManager.bannerIsGroup,
+                                      avatarURL: slackManager.bannerAvatarURL,
+                                      size: 18
+                                  )
                                   Text(slackManager.bannerText)
-                                      .font(.subheadline)
+                                      .font(.system(size: 12, weight: .medium))
                                       .foregroundStyle(.white)
                                       .lineLimit(1)
+                                      .truncationMode(.tail)
                               }
+                              .frame(maxWidth: .infinity, alignment: .trailing)
+                              .padding(.trailing, 8)
 
                               Rectangle()
                                   .fill(.black)
@@ -304,6 +313,45 @@ struct ContentView: View {
                                   SlackMark(size: 18)
                               }
                               .frame(width: 76, alignment: .trailing)
+                          }
+                          .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
+                      } else if Defaults[.enableSlackIntegration] && Defaults[.slackShowStatusOnNotch]
+                          && !coordinator.expandingView.show && vm.notchState == .closed
+                          && (!musicManager.isPlaying && musicManager.isPlayerIdle)
+                          && slackManager.hasSlackPresence && !vm.hideOnClosed
+                      {
+                          HStack(spacing: 0) {
+                              HStack(spacing: 5) {
+                                  if let glyph = slackManager.statusGlyph {
+                                      Text(glyph).font(.system(size: 13))
+                                  } else if slackManager.isInHuddle {
+                                      Image(systemName: "headphones")
+                                          .font(.system(size: 11))
+                                          .foregroundStyle(SlackBrand.green)
+                                  } else if slackManager.dndState.snoozeEnabled {
+                                      Image(systemName: "moon.fill")
+                                          .font(.system(size: 11))
+                                          .foregroundStyle(SlackBrand.yellow)
+                                  } else {
+                                      SlackMark(size: 14)
+                                  }
+                              }
+                              .frame(maxWidth: .infinity, alignment: .trailing)
+                              .padding(.trailing, 8)
+
+                              Rectangle()
+                                  .fill(.black)
+                                  .frame(width: vm.closedNotchSize.width + 10)
+
+                              HStack {
+                                  Text(slackManager.notchPresenceText)
+                                      .font(.system(size: 11, weight: .medium))
+                                      .foregroundStyle(.white.opacity(0.9))
+                                      .lineLimit(1)
+                                      .truncationMode(.tail)
+                              }
+                              .frame(width: 76, alignment: .leading)
+                              .padding(.leading, 8)
                           }
                           .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
                       } else if coordinator.sneakPeek.show && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && vm.notchState == .closed {

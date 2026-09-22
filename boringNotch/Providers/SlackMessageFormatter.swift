@@ -119,6 +119,16 @@ enum SlackMessageFormatter {
 
     // MARK: - Emoji
 
+    /// Returns the unicode glyph for a single Slack shortcode (with or without
+    /// the surrounding colons), or nil if it isn't in the known set. Used to
+    /// render a user's status emoji.
+    static func emojiGlyph(for shortcode: String) -> String? {
+        let trimmed = shortcode.trimmingCharacters(in: CharacterSet(charactersIn: ": "))
+        guard !trimmed.isEmpty else { return nil }
+        let base = trimmed.components(separatedBy: "::").first ?? trimmed
+        return emojiMap[base]
+    }
+
     private static func replaceEmoji(in text: String) -> String {
         replace(pattern: ":([a-z0-9_+-]+):", in: text) { groups in
             let name = groups[1]
@@ -158,5 +168,9 @@ enum SlackMessageFormatter {
         "point_down": "\u{1F447}", "point_right": "\u{1F449}",
         "point_left": "\u{1F448}", "heavy_plus_sign": "\u{2795}",
         "tada_face": "\u{1F389}", "smiling_face_with_tear": "\u{1F972}",
+        "headphones": "\u{1F3A7}", "knife_fork_plate": "\u{1F37D}\u{FE0F}",
+        "walking": "\u{1F6B6}", "house": "\u{1F3E0}", "palm_tree": "\u{1F334}",
+        "spiral_calendar_pad": "\u{1F5D3}\u{FE0F}", "no_entry": "\u{26D4}",
+        "zzz": "\u{1F4A4}", "clock1": "\u{1F550}", "coffee_break": "\u{2615}",
     ]
 }

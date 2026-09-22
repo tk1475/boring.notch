@@ -183,6 +183,7 @@ extension Defaults.Keys {
     static let showSlackPanel = Key<Bool>("showSlackPanel", default: true)
     static let slackShowBanners = Key<Bool>("slackShowBanners", default: true)
     static let slackNotifyDMs = Key<Bool>("slackNotifyDMs", default: true)
+    static let slackShowStatusOnNotch = Key<Bool>("slackShowStatusOnNotch", default: false)
     static let slackHuddleDetection = Key<Bool>("slackHuddleDetection", default: true)
     static let slackPollIntervalSeconds = Key<Double>("slackPollIntervalSeconds", default: 30)
     static let slackLastSeenMentionTs = Key<String>("slackLastSeenMentionTs", default: "")

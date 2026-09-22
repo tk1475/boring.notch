@@ -42,7 +42,7 @@ struct SlackMark: View {
 
 /// Square avatar tile, Slack-style rounded corners. Shows the user's real
 /// profile picture when available, falling back to an initial/group glyph.
-private struct SlackAvatar: View {
+struct SlackAvatar: View {
     let name: String
     var isGroup: Bool = false
     var avatarURL: URL? = nil
@@ -96,6 +96,9 @@ struct SlackView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             header
+            if slackManager.status.isSet || slackManager.dndState.snoozeEnabled {
+                statusRow
+            }
             switch slackManager.connectionState {
             case .connected:
                 content
@@ -144,44 +147,120 @@ struct SlackView: View {
         }
     }
 
+    /// Compact readout of the current custom status and/or snooze, under the header.
+    private var statusRow: some View {
+        HStack(spacing: 5) {
+            if slackManager.status.isSet {
+                if let glyph = slackManager.statusGlyph {
+                    Text(glyph).font(.system(size: 11))
+                } else {
+                    Image(systemName: "face.smiling.inverse")
+                        .font(.system(size: 10))
+                        .foregroundStyle(SlackBrand.yellow)
+                }
+                Text(slackManager.status.text.isEmpty ? "Status set" : slackManager.status.text)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            if slackManager.dndState.snoozeEnabled {
+                Image(systemName: "moon.fill")
+                    .font(.system(size: 9))
+                    .foregroundStyle(SlackBrand.yellow)
+                Text(dndRemainingText)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            } else if let ends = slackManager.status.expiresAt {
+                Text("· \(Self.relativeTime(until: ends))")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
     private var quickActions: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Menu {
-                Button("30 minutes") { Task { await slackManager.snooze(minutes: 30) } }
-                Button("1 hour") { Task { await slackManager.snooze(minutes: 60) } }
-                Button("2 hours") { Task { await slackManager.snooze(minutes: 120) } }
+                Section("Pause notifications") {
+                    Button("For 30 minutes") { Task { await slackManager.snooze(minutes: 30) } }
+                    Button("For 1 hour") { Task { await slackManager.snooze(minutes: 60) } }
+                    Button("For 2 hours") { Task { await slackManager.snooze(minutes: 120) } }
+                    Button("Until tomorrow") { Task { await slackManager.snooze(minutes: minutesUntilTomorrow9am()) } }
+                }
                 if slackManager.dndState.snoozeEnabled {
                     Divider()
-                    Button("Turn off") { Task { await slackManager.endSnooze() } }
+                    Button("Resume notifications") { Task { await slackManager.endSnooze() } }
                 }
             } label: {
                 Image(systemName: slackManager.dndState.snoozeEnabled ? "moon.fill" : "moon")
+                    .font(.system(size: 13))
                     .foregroundStyle(slackManager.dndState.snoozeEnabled ? SlackBrand.yellow : .secondary)
             }
             .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .fixedSize()
-            .help("Do Not Disturb")
+            .help(slackManager.dndState.snoozeEnabled ? "Do Not Disturb on · \(dndRemainingText)" : "Pause notifications")
 
             Menu {
-                Button("🍽️ Lunch (30 min)") {
-                    Task { await slackManager.setStatus(text: "Lunch", emoji: ":knife_fork_plate:", expiresIn: 30) }
+                Section("Set a status") {
+                    Button("🍽  Lunch · 30 min") {
+                        Task { await slackManager.setStatus(text: "Lunch", emoji: ":knife_fork_plate:", expiresIn: 30) }
+                    }
+                    Button("🎧  Focusing · 1 hour") {
+                        Task { await slackManager.setStatus(text: "Focusing", emoji: ":headphones:", expiresIn: 60) }
+                    }
+                    Button("🚶  Stepped away · 15 min") {
+                        Task { await slackManager.setStatus(text: "Stepped away", emoji: ":walking:", expiresIn: 15) }
+                    }
+                    Button("🏠  Working remotely · today") {
+                        Task { await slackManager.setStatus(text: "Working remotely", emoji: ":house:", expiresIn: minutesUntilTomorrow9am()) }
+                    }
+                    Button("📅  In a meeting · 1 hour") {
+                        Task { await slackManager.setStatus(text: "In a meeting", emoji: ":spiral_calendar_pad:", expiresIn: 60) }
+                    }
                 }
-                Button("🎧 Focus (1 h)") {
-                    Task { await slackManager.setStatus(text: "Focusing", emoji: ":headphones:", expiresIn: 60) }
+                if slackManager.status.isSet {
+                    Divider()
+                    Button("Clear status") { Task { await slackManager.clearStatus() } }
                 }
-                Button("🚶 Away (15 min)") {
-                    Task { await slackManager.setStatus(text: "Stepped away", emoji: ":walking:", expiresIn: 15) }
-                }
-                Divider()
-                Button("Clear status") { Task { await slackManager.clearStatus() } }
             } label: {
-                Image(systemName: "face.smiling")
-                    .foregroundStyle(.secondary)
+                Image(systemName: slackManager.status.isSet ? "face.smiling.inverse" : "face.smiling")
+                    .font(.system(size: 13))
+                    .foregroundStyle(slackManager.status.isSet ? SlackBrand.yellow : .secondary)
             }
             .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .fixedSize()
             .help("Set status")
         }
+    }
+
+    private var dndRemainingText: String {
+        guard let ends = slackManager.dndState.snoozeEndsAt else { return "on" }
+        return Self.relativeTime(until: ends)
+    }
+
+    /// Minutes from now until 9am tomorrow, for "until tomorrow" style actions.
+    private func minutesUntilTomorrow9am() -> Int {
+        let calendar = Calendar.current
+        let now = Date()
+        guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: now),
+              let nine = calendar.date(
+                bySettingHour: 9, minute: 0, second: 0, of: tomorrow
+              ) else { return 720 }
+        return max(30, Int(nine.timeIntervalSince(now) / 60))
+    }
+
+    /// Short "1h 20m" / "45m left"-style label until a future date.
+    static func relativeTime(until date: Date) -> String {
+        let seconds = Int(date.timeIntervalSinceNow)
+        guard seconds > 0 else { return "ending" }
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        if hours > 0 { return "\(hours)h \(minutes)m left" }
+        return "\(max(1, minutes))m left"
     }
 
     private var content: some View {
