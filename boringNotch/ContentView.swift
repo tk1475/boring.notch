@@ -301,8 +301,8 @@ struct ContentView: View {
                                       .foregroundStyle(.white)
                                       .lineLimit(1)
                                       .truncationMode(.tail)
+                                      .fixedSize()
                               }
-                              .frame(maxWidth: 160, alignment: .trailing)
                               .padding(.trailing, 10)
 
                               Rectangle()
