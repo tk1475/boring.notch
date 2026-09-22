@@ -319,7 +319,7 @@ class SlackManager: ObservableObject {
 
     private func announceDMs(_ newDMs: [SlackDMSummary]) {
         if newDMs.count == 1, let dm = newDMs.first {
-            bannerText = dm.isGroup ? dm.name : conciseName(dm.name)
+            bannerText = conciseName(dm.name)
             setBannerSender(name: dm.name, avatarURL: dm.avatarURL, isGroup: dm.isGroup)
         } else {
             bannerText = "\(newDMs.count) new DMs"
@@ -332,7 +332,7 @@ class SlackManager: ObservableObject {
     /// demand. Uses a real DM (real avatar + name) when one is available.
     func previewBanner() {
         if let dm = dmSummaries.first {
-            bannerText = dm.isGroup ? dm.name : conciseName(dm.name)
+            bannerText = conciseName(dm.name)
             setBannerSender(name: dm.name, avatarURL: dm.avatarURL, isGroup: dm.isGroup)
         } else {
             bannerText = "Preview notification"
@@ -348,11 +348,15 @@ class SlackManager: ObservableObject {
     }
 
     /// A compact name for the closed-notch banner: the full name when it's
-    /// short, otherwise just the first name so it fits without a mid-word cut.
+    /// short, otherwise the first name, hard-capped at 15 characters with an
+    /// ellipsis so it never runs into the notch.
     private func conciseName(_ name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
-        guard trimmed.count > 16 else { return trimmed }
-        return trimmed.split(separator: " ").first.map(String.init) ?? trimmed
+        let base = trimmed.count > 16
+            ? (trimmed.split(separator: " ").first.map(String.init) ?? trimmed)
+            : trimmed
+        guard base.count > 15 else { return base }
+        return base.prefix(15).trimmingCharacters(in: .whitespaces) + "…"
     }
 }
 
