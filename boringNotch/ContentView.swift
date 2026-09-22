@@ -294,7 +294,7 @@ struct ContentView: View {
                                       name: slackManager.bannerAvatarName,
                                       isGroup: slackManager.bannerIsGroup,
                                       avatarURL: slackManager.bannerAvatarURL,
-                                      size: 18
+                                      size: 16
                                   )
                                   Text(slackManager.bannerText)
                                       .font(.system(size: 12, weight: .medium))
@@ -302,17 +302,15 @@ struct ContentView: View {
                                       .lineLimit(1)
                                       .truncationMode(.tail)
                               }
-                              .frame(maxWidth: 170, alignment: .trailing)
-                              .padding(.trailing, 8)
+                              .frame(maxWidth: 160, alignment: .trailing)
+                              .padding(.trailing, 10)
 
                               Rectangle()
                                   .fill(.black)
                                   .frame(width: vm.closedNotchSize.width + 10)
 
-                              HStack {
-                                  SlackMark(size: 18)
-                              }
-                              .frame(width: 76, alignment: .leading)
+                              SlackMark(size: 16)
+                                  .padding(.leading, 10)
                           }
                           .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
                       } else if Defaults[.enableSlackIntegration] && Defaults[.slackShowStatusOnNotch]
@@ -321,7 +319,7 @@ struct ContentView: View {
                           && slackManager.hasSlackPresence && !vm.hideOnClosed
                       {
                           HStack(spacing: 0) {
-                              HStack(spacing: 5) {
+                              Group {
                                   if let glyph = slackManager.statusGlyph {
                                       Text(glyph).font(.system(size: 13))
                                   } else if slackManager.isInHuddle {
@@ -336,22 +334,19 @@ struct ContentView: View {
                                       SlackMark(size: 14)
                                   }
                               }
-                              .frame(width: 76, alignment: .trailing)
-                              .padding(.trailing, 8)
+                              .padding(.trailing, 10)
 
                               Rectangle()
                                   .fill(.black)
                                   .frame(width: vm.closedNotchSize.width + 10)
 
-                              HStack {
-                                  Text(slackManager.notchPresenceText)
-                                      .font(.system(size: 11, weight: .medium))
-                                      .foregroundStyle(.white.opacity(0.9))
-                                      .lineLimit(1)
-                                      .truncationMode(.tail)
-                              }
-                              .frame(width: 76, alignment: .leading)
-                              .padding(.leading, 8)
+                              Text(slackManager.notchPresenceText)
+                                  .font(.system(size: 11, weight: .medium))
+                                  .foregroundStyle(.white.opacity(0.9))
+                                  .lineLimit(1)
+                                  .truncationMode(.tail)
+                                  .frame(maxWidth: 150, alignment: .leading)
+                                  .padding(.leading, 10)
                           }
                           .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
                       } else if coordinator.sneakPeek.show && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && vm.notchState == .closed {
