@@ -347,16 +347,14 @@ class SlackManager: ObservableObject {
         bannerIsGroup = isGroup
     }
 
-    /// A compact name for the closed-notch banner: the full name when it's
-    /// short, otherwise the first name, hard-capped at 15 characters with an
+    /// A compact name for the closed-notch banner: cropped to the first word
+    /// (cut at the first space) and hard-capped at 10 characters with an
     /// ellipsis so it never runs into the notch.
     private func conciseName(_ name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
-        let base = trimmed.count > 16
-            ? (trimmed.split(separator: " ").first.map(String.init) ?? trimmed)
-            : trimmed
-        guard base.count > 15 else { return base }
-        return base.prefix(15).trimmingCharacters(in: .whitespaces) + "…"
+        let firstWord = trimmed.split(separator: " ").first.map(String.init) ?? trimmed
+        guard firstWord.count > 10 else { return firstWord }
+        return firstWord.prefix(10).trimmingCharacters(in: .whitespaces) + "…"
     }
 }
 
