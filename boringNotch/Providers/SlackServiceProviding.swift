@@ -30,6 +30,7 @@ struct SlackIdentity: Sendable, Equatable {
     let userID: String
     let userName: String
     let teamName: String
+    let teamID: String
 }
 
 struct SlackDMSummary: Identifiable, Sendable, Equatable {
@@ -42,6 +43,7 @@ struct SlackDMSummary: Identifiable, Sendable, Equatable {
 
 struct SlackMention: Identifiable, Sendable, Equatable {
     let id: String          // channelID + ts
+    let channelID: String
     let channelName: String
     let userName: String
     let text: String
@@ -132,7 +134,8 @@ final class SlackService: SlackServiceProviding {
         return SlackIdentity(
             userID: response.user_id ?? "",
             userName: response.user ?? "",
-            teamName: response.team ?? ""
+            teamName: response.team ?? "",
+            teamID: response.team_id ?? ""
         )
     }
 
@@ -215,6 +218,7 @@ final class SlackService: SlackServiceProviding {
             }
             mentions.append(SlackMention(
                 id: "\(match.channel?.id ?? "")-\(messageTs)",
+                channelID: match.channel?.id ?? "",
                 channelName: match.channel?.name ?? "unknown",
                 userName: name,
                 text: text,
@@ -389,6 +393,7 @@ private struct AuthTestResponse: SlackAPIResponse {
     let user_id: String?
     let user: String?
     let team: String?
+    let team_id: String?
 }
 
 private struct ConversationsListResponse: SlackAPIResponse {

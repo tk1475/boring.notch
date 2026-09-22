@@ -279,22 +279,28 @@ struct SlackView: View {
                 if !slackManager.dmSummaries.isEmpty {
                     sectionHeader("Direct messages")
                     ForEach(slackManager.dmSummaries) { dm in
-                        HStack(spacing: 6) {
-                            SlackAvatar(name: dm.name, isGroup: dm.isGroup, avatarURL: dm.avatarURL, size: 18)
-                            Text(dm.name)
-                                .font(.caption2)
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                            Spacer(minLength: 4)
-                            Text("\(dm.unreadCount)")
-                                .font(.system(size: 9, weight: .bold))
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 1)
-                                .background(Capsule().fill(SlackBrand.red))
-                                .foregroundStyle(.white)
-                                .layoutPriority(1)
+                        Button {
+                            slackManager.openConversation(id: dm.id)
+                        } label: {
+                            HStack(spacing: 6) {
+                                SlackAvatar(name: dm.name, isGroup: dm.isGroup, avatarURL: dm.avatarURL, size: 18)
+                                Text(dm.name)
+                                    .font(.caption2)
+                                    .foregroundStyle(.white)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                Spacer(minLength: 4)
+                                Text("\(dm.unreadCount)")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(Capsule().fill(SlackBrand.red))
+                                    .foregroundStyle(.white)
+                                    .layoutPriority(1)
+                            }
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
                     }
                 }
 
@@ -302,7 +308,9 @@ struct SlackView: View {
                     sectionHeader("Mentions")
                     ForEach(slackManager.mentions.prefix(4)) { mention in
                         Button {
-                            if let permalink = mention.permalink {
+                            if !mention.channelID.isEmpty {
+                                slackManager.openConversation(id: mention.channelID, messageTs: mention.timestamp)
+                            } else if let permalink = mention.permalink {
                                 NSWorkspace.shared.open(permalink)
                             }
                         } label: {

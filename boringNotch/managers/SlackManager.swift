@@ -147,6 +147,27 @@ class SlackManager: ObservableObject {
         stop()
     }
 
+    // MARK: Opening in Slack
+
+    /// Opens a conversation in the Slack desktop app via a `slack://` deep link,
+    /// falling back to the web client when the app isn't installed. `messageTs`
+    /// deep-links to a specific message (used for mentions).
+    func openConversation(id: String, messageTs: String? = nil) {
+        let teamID = identity?.teamID ?? ""
+        var deepLinkString = "slack://channel?team=\(teamID)&id=\(id)"
+        if let messageTs { deepLinkString += "&message=\(messageTs)" }
+
+        let deepLink = URL(string: deepLinkString)
+        let webURL = URL(string: "https://app.slack.com/client/\(teamID)/\(id)")
+
+        if !teamID.isEmpty, let deepLink,
+           NSWorkspace.shared.urlForApplication(toOpen: deepLink) != nil {
+            NSWorkspace.shared.open(deepLink)
+        } else if !teamID.isEmpty, let webURL {
+            NSWorkspace.shared.open(webURL)
+        }
+    }
+
     // MARK: Quick actions
 
     func setStatus(text: String, emoji: String, expiresIn minutes: Int?) async {
